@@ -29,6 +29,13 @@ func NewLinkManager(selfID string, signaling SignalingTransport) *LinkManager {
 	}
 }
 
+// GetLink safely returns an existing SFULink by remote node ID.
+func (lm *LinkManager) GetLink(nodeID string) *SFULink {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	return lm.links[nodeID]
+}
+
 // If lower ID -> offer, higher ID -> answerer
 func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFULink, error) {
 	lm.mu.RLock()
@@ -48,6 +55,7 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 		RemoteID: peer.NodeID,
 		conn:     pc,
 	}
+
 	lm.mu.Lock()
 	lm.links[peer.NodeID] = link
 	lm.mu.Unlock()
@@ -55,6 +63,9 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 	if lm.selfID < peer.NodeID {
 		err := lm.setUpAsOfferer(ctx, link, peer)
 		if err != nil {
+			lm.mu.Lock()
+			delete(lm.links, peer.NodeID)
+			lm.mu.Unlock()
 			pc.Close()
 			return nil, err
 		}
@@ -66,7 +77,9 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 func (lm *LinkManager) setUpAsOfferer(ctx context.Context, link *SFULink, peer *SFUPeerInfo) error {
 	pc := link.conn
 
-	link.InitControlChannel()
+	if err := link.InitControlChannel(); err != nil {
+		return fmt.Errorf("init control channel: %w", err)
+	}
 
 	offer, err := pc.CreateOffer(nil)
 	if err != nil {
@@ -78,7 +91,9 @@ func (lm *LinkManager) setUpAsOfferer(ctx context.Context, link *SFULink, peer *
 	}
 
 	<-webrtc.GatheringCompletePromise(pc)
-	answerSDP, err := lm.signaling.SendOffer(ctx, lm.selfID, peer.NodeID, peer.Addr, pc)
+
+	// Send pc.LocalDescription().SDP with gathered ICE candidates (not raw offer.SDP)
+	answerSDP, err := lm.signaling.SendOffer(ctx, lm.selfID, peer.NodeID, peer.Addr, pc.LocalDescription().SDP)
 	if err != nil {
 		return fmt.Errorf("send offer to %s: %w", peer.NodeID, err)
 	}
@@ -103,7 +118,7 @@ func (lm *LinkManager) RegisterHTTPHandler(mux *http.ServeMux) {
 			return
 		}
 
-		var offererID string = r.Header.Get("Node-ID")
+		offererID := r.Header.Get("Node-ID")
 		if offererID == "" {
 			http.Error(w, "empty offerer id", http.StatusBadRequest)
 			return
@@ -137,7 +152,10 @@ func (lm *LinkManager) handleOffer(ctx context.Context, offererID string, offerS
 		lm.links[offererID] = link
 		lm.mu.Unlock()
 	}
-	link.InitControlChannel()
+
+	if err := link.InitControlChannel(); err != nil {
+		return "", err
+	}
 
 	pc := link.conn
 
