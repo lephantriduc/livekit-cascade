@@ -14,7 +14,7 @@ type SFULink struct {
 	RemoteID string
 	Addr     string
 
-	conn        *webrtc.PeerConnection
+	pc          *webrtc.PeerConnection
 	controlChan *webrtc.DataChannel
 
 	mu        sync.RWMutex
@@ -43,7 +43,7 @@ func (link *SFULink) OnControl(handler func(CascadeControlMsg)) {
 
 func (link *SFULink) InitControlChannel() error {
 	id := uint16(0)
-	dc, err := link.conn.CreateDataChannel("control", &webrtc.DataChannelInit{
+	dc, err := link.pc.CreateDataChannel("control", &webrtc.DataChannelInit{
 		Negotiated: new(true),
 		Ordered:    new(true),
 		ID:         &id,
@@ -72,5 +72,5 @@ func (link *SFULink) InitControlChannel() error {
 }
 
 func (link *SFULink) Close() error {
-	return link.conn.Close()
+	return link.pc.Close()
 }

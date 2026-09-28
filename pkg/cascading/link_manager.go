@@ -53,7 +53,7 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 	link := &SFULink{
 		LocalID:  lm.selfID,
 		RemoteID: peer.NodeID,
-		conn:     pc,
+		pc:       pc,
 	}
 
 	lm.mu.Lock()
@@ -75,7 +75,7 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 }
 
 func (lm *LinkManager) setUpAsOfferer(ctx context.Context, link *SFULink, peer *SFUPeerInfo) error {
-	pc := link.conn
+	pc := link.pc
 
 	if err := link.InitControlChannel(); err != nil {
 		return fmt.Errorf("init control channel: %w", err)
@@ -146,7 +146,7 @@ func (lm *LinkManager) handleOffer(ctx context.Context, offererID string, offerS
 		link = &SFULink{
 			LocalID:  lm.selfID,
 			RemoteID: offererID,
-			conn:     pc,
+			pc:       pc,
 		}
 		lm.mu.Lock()
 		lm.links[offererID] = link
@@ -157,7 +157,7 @@ func (lm *LinkManager) handleOffer(ctx context.Context, offererID string, offerS
 		return "", err
 	}
 
-	pc := link.conn
+	pc := link.pc
 
 	slog.Info(fmt.Sprintf("Setting remote (%v) description", offererID))
 	err := pc.SetRemoteDescription(webrtc.SessionDescription{
