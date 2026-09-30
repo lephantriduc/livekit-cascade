@@ -18,6 +18,7 @@ const (
 	MsgRelayTrack          CascadeControlMsgType = "RELAY_TRACK"
 	MsgStopRelay           CascadeControlMsgType = "STOP_RELAY"
 	MsgSubscriptionRequest CascadeControlMsgType = "SUBSCRIPTION_REQUEST"
+	MsgPLIRequest          CascadeControlMsgType = "PLI_REQUEST"
 )
 
 type CascadeControlMsg struct {

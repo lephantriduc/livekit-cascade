@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/livekit/protocol/livekit"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -32,6 +33,25 @@ func (link *SFULink) SendControl(msg CascadeControlMsg) error {
 	}
 
 	return link.controlChan.Send(data)
+}
+
+func (link *SFULink) AddTrack(codec webrtc.RTPCodecParameters, trackID livekit.TrackID) (*webrtc.TrackLocalStaticRTP, *webrtc.RTPSender, error) {
+	track, err := webrtc.NewTrackLocalStaticRTP(codec.RTPCodecCapability, string(trackID), link.LocalID)
+	if err != nil {
+		return nil, nil, err
+	}
+	rtpSender, err := link.pc.AddTrack(track)
+	if err != nil {
+		return nil, nil, err
+	}
+	return track, rtpSender, nil
+}
+
+func (link *SFULink) RemoveTrack(sender *webrtc.RTPSender) error {
+	if sender == nil {
+		return nil
+	}
+	return link.pc.RemoveTrack(sender)
 }
 
 // OnControl safely registers the message callback

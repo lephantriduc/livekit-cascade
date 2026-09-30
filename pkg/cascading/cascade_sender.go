@@ -1,11 +1,11 @@
 package cascading
 
 import (
-	"github.com/livekit/livekit-server/pkg/sfu"
-
-	"github.com/livekit/livekit-server/pkg/sfu/buffer"
 	"github.com/livekit/protocol/livekit"
 	"github.com/pion/webrtc/v4"
+
+	"github.com/livekit/livekit-server/pkg/sfu"
+	"github.com/livekit/livekit-server/pkg/sfu/buffer"
 )
 
 // CascadeSender implements TrackSender in pkg/sfu/interfaces.go
@@ -19,6 +19,7 @@ type CascadeSender struct {
 	peerID     string // The remote SFU's ID
 	link       *SFULink
 	trackLocal *webrtc.TrackLocalStaticRTP
+	rtpSender  *webrtc.RTPSender
 }
 
 // Write an RTP Packet to CascadeSender's RTPSender
@@ -39,9 +40,18 @@ func (sender *CascadeSender) UpTrackBitrateAvailabilityChange()                 
 func (sender *CascadeSender) UpTrackMaxPublishedLayerChange(maxPublishedLayer int32)              {}
 func (sender *CascadeSender) UpTrackMaxTemporalLayerSeenChange(maxTemporalLayerSeen int32)        {}
 func (sender *CascadeSender) UpTrackBitrateReport(availableLayers []int32, bitrates sfu.Bitrates) {}
-func (sender *CascadeSender) Close()                                                              {}
-func (sender *CascadeSender) IsClosed() bool                                                      { return false }
-func (sender *CascadeSender) ID() string                                                          { return "" }
-func (sender *CascadeSender) Resync()                                                             {}
-func (sender *CascadeSender) SetReceiver(CascadeSender)                                           {}
-func (sender *CascadeSender) ReceiverRestart(CascadeSender)                                       {}
+func (sender *CascadeSender) Close() {
+	if sender.link != nil {
+		_ = sender.link.RemoveTrack(sender.rtpSender)
+	}
+}
+func (sender *CascadeSender) IsClosed() bool { return false }
+func (sender *CascadeSender) ID() string     { return string(sender.trackID) }
+func (sender *CascadeSender) HandleRTCPSenderReportData(webrtc.PayloadType, int32, *livekit.RTCPSenderReportState) error {
+	return nil
+}
+func (sender *CascadeSender) Resync()                           {}
+func (sender *CascadeSender) SetReceiver(sfu.TrackReceiver)     {}
+func (sender *CascadeSender) ReceiverRestart(sfu.TrackReceiver) {}
+
+var _ sfu.TrackSender = (*CascadeSender)(nil)
