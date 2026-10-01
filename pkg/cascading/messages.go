@@ -19,6 +19,7 @@ const (
 	MsgStopRelay           CascadeControlMsgType = "STOP_RELAY"
 	MsgSubscriptionRequest CascadeControlMsgType = "SUBSCRIPTION_REQUEST"
 	MsgPLIRequest          CascadeControlMsgType = "PLI_REQUEST"
+	MsgGossip              CascadeControlMsgType = "GOSSIP"
 )
 
 type CascadeControlMsg struct {
@@ -52,4 +53,6 @@ type AnswerMsg struct {
 }
 
 type CoordinatorMsg struct {
+	HubID string
+	Epoch int64
 }

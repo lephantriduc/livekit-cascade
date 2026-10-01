@@ -20,6 +20,7 @@ type SFULink struct {
 
 	mu        sync.RWMutex
 	onControl func(CascadeControlMsg)
+	onGossip  func(GossipMsg)
 }
 
 func (link *SFULink) SendControl(msg CascadeControlMsg) error {
@@ -33,6 +34,18 @@ func (link *SFULink) SendControl(msg CascadeControlMsg) error {
 	}
 
 	return link.controlChan.Send(data)
+}
+
+func (link *SFULink) SendGossip(msg GossipMsg) error {
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return link.SendControl(CascadeControlMsg{
+		Type:    MsgGossip,
+		Payload: payload,
+		Version: 1,
+	})
 }
 
 func (link *SFULink) AddTrack(codec webrtc.RTPCodecParameters, trackID livekit.TrackID) (*webrtc.TrackLocalStaticRTP, *webrtc.RTPSender, error) {
@@ -61,6 +74,12 @@ func (link *SFULink) OnControl(handler func(CascadeControlMsg)) {
 	link.onControl = handler
 }
 
+func (link *SFULink) OnGossip(handler func(GossipMsg)) {
+	link.mu.Lock()
+	defer link.mu.Unlock()
+	link.onGossip = handler
+}
+
 func (link *SFULink) InitControlChannel() error {
 	id := uint16(0)
 	dc, err := link.pc.CreateDataChannel("control", &webrtc.DataChannelInit{
@@ -76,6 +95,19 @@ func (link *SFULink) InitControlChannel() error {
 	link.controlChan.OnMessage(func(msg webrtc.DataChannelMessage) {
 		var ctrl CascadeControlMsg
 		if err := json.Unmarshal(msg.Data, &ctrl); err != nil {
+			return
+		}
+		if ctrl.Type == MsgGossip {
+			var gossip GossipMsg
+			if err := json.Unmarshal(ctrl.Payload, &gossip); err != nil {
+				return
+			}
+			link.mu.RLock()
+			handler := link.onGossip
+			link.mu.RUnlock()
+			if handler != nil {
+				handler(gossip)
+			}
 			return
 		}
 

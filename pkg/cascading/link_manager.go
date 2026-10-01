@@ -17,8 +17,9 @@ type LinkManager struct {
 	selfID    string
 	signaling SignalingTransport
 
-	mu    sync.RWMutex
-	links map[string]*SFULink
+	mu     sync.RWMutex
+	links  map[string]*SFULink
+	onLink func(*SFULink)
 }
 
 func NewLinkManager(selfID string, signaling SignalingTransport) *LinkManager {
@@ -34,6 +35,38 @@ func (lm *LinkManager) GetLink(nodeID string) *SFULink {
 	lm.mu.RLock()
 	defer lm.mu.RUnlock()
 	return lm.links[nodeID]
+}
+
+func (lm *LinkManager) All() []*SFULink {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	links := make([]*SFULink, 0, len(lm.links))
+	for _, link := range lm.links {
+		links = append(links, link)
+	}
+	return links
+}
+
+func (lm *LinkManager) OnLink(fn func(*SFULink)) {
+	lm.mu.Lock()
+	lm.onLink = fn
+	links := make([]*SFULink, 0, len(lm.links))
+	for _, link := range lm.links {
+		links = append(links, link)
+	}
+	lm.mu.Unlock()
+	for _, link := range links {
+		fn(link)
+	}
+}
+
+func (lm *LinkManager) notifyLink(link *SFULink) {
+	lm.mu.RLock()
+	fn := lm.onLink
+	lm.mu.RUnlock()
+	if fn != nil {
+		fn(link)
+	}
 }
 
 // If lower ID -> offer, higher ID -> answerer
@@ -59,6 +92,7 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 	lm.mu.Lock()
 	lm.links[peer.NodeID] = link
 	lm.mu.Unlock()
+	lm.notifyLink(link)
 
 	if lm.selfID < peer.NodeID {
 		err := lm.setUpAsOfferer(ctx, link, peer)
@@ -151,6 +185,7 @@ func (lm *LinkManager) handleOffer(ctx context.Context, offererID string, offerS
 		lm.mu.Lock()
 		lm.links[offererID] = link
 		lm.mu.Unlock()
+		lm.notifyLink(link)
 	}
 
 	if err := link.InitControlChannel(); err != nil {
