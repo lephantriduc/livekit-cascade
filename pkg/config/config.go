@@ -102,6 +102,7 @@ type Config struct {
 	Logging  LoggingConfig `yaml:"logging,omitempty"`
 	Limit    LimitConfig   `yaml:"limit,omitempty"`
 	Agents   agent.Config  `yaml:"agents,omitempty"`
+	Cascade  CascadeConfig `yaml:"cascade,omitempty"`
 
 	Development bool `yaml:"development,omitempty"`
 
@@ -115,6 +116,21 @@ type Config struct {
 	EnableParticipantDataBlob bool `yaml:"enable_participant_data_blob,omitempty"`
 
 	API APIConfig `yaml:"api,omitempty"`
+}
+
+type CascadeConfig struct {
+	Enabled    bool         `yaml:"enabled,omitempty"`
+	SelfID     string       `yaml:"self_id,omitempty"`
+	SelfAddr   string       `yaml:"self_addr,omitempty"`
+	Topology   string       `yaml:"topology,omitempty"`
+	HubID      string       `yaml:"hub_id,omitempty"`
+	ListenPort int          `yaml:"listen_port,omitempty"`
+	Peers      []PeerConfig `yaml:"peers,omitempty"`
+}
+
+type PeerConfig struct {
+	ID   string `yaml:"id,omitempty"`
+	Addr string `yaml:"addr,omitempty"`
 }
 
 type RTCConfig struct {

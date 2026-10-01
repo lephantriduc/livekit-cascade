@@ -16,6 +16,17 @@
 # for production setups, this port should be placed behind a load balancer with TLS
 port: 7880
 
+# Optional SFU-to-SFU cascading.
+# cascade:
+#   enabled: true
+#   self_id: sfu-a
+#   self_addr: 127.0.0.1:7882
+#   topology: mesh
+#   listen_port: 7882
+#   peers:
+#   - id: sfu-b
+#     addr: 127.0.0.1:7883
+
 # when redis is set, LiveKit will automatically operate in a fully distributed fashion
 # clients could connect to any node and be routed to the same room
 redis:

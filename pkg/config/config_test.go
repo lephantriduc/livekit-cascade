@@ -42,6 +42,23 @@ func TestConfig_DefaultsKept(t *testing.T) {
 	require.Equal(t, uint32(10), conf.Room.EmptyTimeout)
 }
 
+func TestConfig_Cascade(t *testing.T) {
+	conf, err := NewConfig(`cascade:
+  enabled: true
+  self_id: sfu-a
+  self_addr: 127.0.0.1:7882
+  topology: hub-spoke
+  hub_id: sfu-a
+  listen_port: 7882
+  peers:
+    - id: sfu-b
+      addr: 127.0.0.1:7883`, true, nil, nil)
+	require.NoError(t, err)
+	require.True(t, conf.Cascade.Enabled)
+	require.Equal(t, "sfu-a", conf.Cascade.SelfID)
+	require.Equal(t, "sfu-b", conf.Cascade.Peers[0].ID)
+}
+
 func TestConfig_SignalMessageSizeLimitDefaults(t *testing.T) {
 	conf, err := NewConfig("", true, nil, nil)
 	require.NoError(t, err)

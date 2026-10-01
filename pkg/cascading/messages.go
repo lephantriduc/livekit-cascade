@@ -1,5 +1,7 @@
 package cascading
 
+import "github.com/livekit/protocol/livekit"
+
 type SFUPeerInfo struct {
 	NodeID string
 	IP     string
@@ -55,4 +57,10 @@ type AnswerMsg struct {
 type CoordinatorMsg struct {
 	HubID string
 	Epoch int64
+}
+
+type TrackPublishedGossip struct {
+	OriginSFUID string             `json:"origin_sfu_id"`
+	DestSFUID   string             `json:"dest_sfu_id,omitempty"`
+	Track       *livekit.TrackInfo `json:"track"`
 }

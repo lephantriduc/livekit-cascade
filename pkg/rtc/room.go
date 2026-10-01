@@ -38,6 +38,7 @@ import (
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/livekit-server/pkg/agent"
+	"github.com/livekit/livekit-server/pkg/cascading"
 	"github.com/livekit/livekit-server/pkg/config"
 	"github.com/livekit/livekit-server/pkg/routing"
 	"github.com/livekit/livekit-server/pkg/rtc/types"
@@ -114,6 +115,7 @@ type Room struct {
 	telemetry       telemetry.TelemetryService
 	egressLauncher  EgressLauncher
 	trackManager    *RoomTrackManager
+	cascadeManager  *cascading.Manager
 	agentDispatches map[string]*agentDispatch
 
 	// agents
@@ -319,6 +321,29 @@ func NewRoom(
 
 func (r *Room) Logger() logger.Logger {
 	return r.logger
+}
+
+func (r *Room) SetCascadeManager(manager *cascading.Manager) {
+	r.lock.Lock()
+	r.cascadeManager = manager
+	r.lock.Unlock()
+}
+
+// AddRelayedTrack registers a track received from another SFU without
+// announcing it again, preventing a gossip loop.
+func (r *Room) AddRelayedTrack(track types.MediaTrack) {
+	if track == nil {
+		return
+	}
+	r.trackManager.AddTrack(track, track.PublisherIdentity(), track.PublisherID())
+	r.lock.RLock()
+	for _, participant := range r.participants {
+		if participant.State() != livekit.ParticipantInfo_ACTIVE || !r.autoSubscribe(participant) {
+			continue
+		}
+		participant.SubscribeToTrack(track.ID(), false)
+	}
+	r.lock.RUnlock()
 }
 
 func (r *Room) ToProto() *livekit.Room {
@@ -1075,6 +1100,15 @@ func (r *Room) createJoinResponseLocked(
 // a ParticipantImpl in the room added a new track, subscribe other participants to it
 func (r *Room) onTrackPublished(participant types.Participant, track types.MediaTrack) {
 	r.trackManager.AddTrack(track, participant.Identity(), participant.ID())
+
+	r.lock.RLock()
+	cascadeManager := r.cascadeManager
+	r.lock.RUnlock()
+	if cascadeManager != nil {
+		if err := cascadeManager.AnnounceTrackPublished(track.ToProto()); err != nil {
+			r.logger.Warnw("failed to announce track to cascade", err, "trackID", track.ID())
+		}
+	}
 
 	// publish participant update, since track state is changed
 	r.broadcastParticipantState(participant, broadcastOptions{skipSource: true})
