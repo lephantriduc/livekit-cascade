@@ -1,5 +1,7 @@
 package topology
 
+import "slices"
+
 // Strategy selects the peers a node should connect to.
 type Strategy interface {
 	Neighbors(selfID string, allNodes []string) []string
@@ -19,10 +21,8 @@ func (h HubSpoke) Neighbors(selfID string, allNodes []string) []string {
 	if selfID == h.HubID {
 		return excludingSelf(selfID, allNodes)
 	}
-	for _, node := range allNodes {
-		if node == h.HubID {
-			return []string{h.HubID}
-		}
+	if slices.Contains(allNodes, h.HubID) {
+		return []string{h.HubID}
 	}
 	return nil
 }

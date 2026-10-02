@@ -168,7 +168,7 @@ func (lm *LinkManager) RegisterHTTPHandler(mux *http.ServeMux) {
 	})
 }
 
-func (lm *LinkManager) handleOffer(ctx context.Context, offererID string, offerSDP string) (string, error) {
+func (lm *LinkManager) handleOffer(_ context.Context, offererID string, offerSDP string) (string, error) {
 	lm.mu.RLock()
 	link, ok := lm.links[offererID]
 	lm.mu.RUnlock()
