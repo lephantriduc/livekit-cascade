@@ -45,6 +45,7 @@ import (
 	"github.com/livekit/psrpc/pkg/middleware"
 
 	"github.com/livekit/livekit-server/pkg/agent"
+	"github.com/livekit/livekit-server/pkg/cascading"
 	"github.com/livekit/livekit-server/pkg/sfu"
 	sutils "github.com/livekit/livekit-server/pkg/utils"
 
@@ -71,7 +72,8 @@ type iceConfigCacheKey struct {
 // RoomManager manages rooms and its interaction with participants.
 // It's responsible for creating, deleting rooms, as well as running sessions for participants
 type RoomManager struct {
-	lock sync.RWMutex
+	lock           sync.RWMutex
+	cascadeManager *cascading.Manager
 
 	config            *config.Config
 	rtcConfig         *rtc.WebRTCConfig
@@ -106,6 +108,12 @@ type RoomManager struct {
 	rpc.UnimplementedParticipantServer
 	rpc.UnimplementedRoomServer
 	rpc.UnimplementedRoomManagerServer
+}
+
+func (r *RoomManager) SetCascadeManager(manager *cascading.Manager) {
+	r.lock.Lock()
+	r.cascadeManager = manager
+	r.lock.Unlock()
 }
 
 func NewLocalRoomManager(
@@ -674,6 +682,9 @@ func (r *RoomManager) getOrCreateRoom(ctx context.Context, createRoom *livekit.C
 
 	// construct ice servers
 	newRoom := rtc.NewRoom(ri, internal, *r.rtcConfig, r.config.Room, &r.config.Audio, r.serverInfo, r.telemetry, r.agentClient, r.agentStore, r.egressLauncher)
+	if r.cascadeManager != nil {
+		newRoom.SetCascadeManager(r.cascadeManager)
+	}
 
 	roomTopic := rpc.FormatRoomTopic(roomName)
 	roomServer := must.Get(rpc.NewTypedRoomServer(r, r.bus))

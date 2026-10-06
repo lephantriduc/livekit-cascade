@@ -3,6 +3,9 @@ package cascading
 import (
 	"sync"
 	"time"
+
+	"github.com/livekit/livekit-server/pkg/telemetry/prometheus"
+	"github.com/livekit/protocol/logger"
 )
 
 const electionAnswerTimeout = 3 * time.Second
@@ -25,12 +28,13 @@ type BullyElection struct {
 	transport ElectionTransport
 	epochs    EpochStore
 
-	mu          sync.Mutex
-	epoch       int64
-	coordinator string
-	election    bool
-	answers     chan struct{}
-	randBackoff func() time.Duration
+	mu                sync.Mutex
+	epoch             int64
+	coordinator       string
+	election          bool
+	electionStartedAt time.Time
+	answers           chan struct{}
+	randBackoff       func() time.Duration
 }
 
 func NewBullyElection(selfID string, score float64, peers []string, transport ElectionTransport, epochs EpochStore) *BullyElection {
@@ -53,6 +57,10 @@ func (b *BullyElection) Coordinator() string {
 	return b.coordinator
 }
 
+func (b *BullyElection) CurrentHub() string {
+	return b.Coordinator()
+}
+
 func (b *BullyElection) StartElection() {
 	go func() {
 		time.Sleep(b.randBackoff())
@@ -72,10 +80,12 @@ func (b *BullyElection) startElection() {
 		return
 	}
 	b.election = true
+	b.electionStartedAt = time.Now()
 	b.epoch = epoch
 	b.answers = make(chan struct{}, 1)
 	answers := b.answers
 	b.mu.Unlock()
+	prometheus.CascadeElectionsTotal.Inc()
 
 	msg := ElectionMsg{SenderID: b.selfID, Score: b.score, Epoch: epoch}
 	for _, peerID := range b.peers {
@@ -128,13 +138,16 @@ func (b *BullyElection) HandleAnswer(msg AnswerMsg) {
 
 func (b *BullyElection) HandleCoordinator(msg CoordinatorMsg) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	if msg.Epoch < b.epoch {
+		b.mu.Unlock()
 		return
 	}
 	b.epoch = msg.Epoch
 	b.coordinator = msg.HubID
 	b.election = false
+	startedAt := b.electionStartedAt
+	b.mu.Unlock()
+	logger.Infow("cascade election result", "newHub", msg.HubID, "epoch", msg.Epoch, "durationMs", time.Since(startedAt).Milliseconds())
 }
 
 func (b *BullyElection) declareCoordinator(epoch int64) {
@@ -144,7 +157,9 @@ func (b *BullyElection) declareCoordinator(epoch int64) {
 	b.mu.Lock()
 	b.coordinator = b.selfID
 	b.epoch = epoch
+	startedAt := b.electionStartedAt
 	b.mu.Unlock()
+	logger.Infow("cascade election result", "newHub", b.selfID, "epoch", epoch, "durationMs", time.Since(startedAt).Milliseconds())
 }
 
 // Score favors high bandwidth and penalizes latency and CPU load.

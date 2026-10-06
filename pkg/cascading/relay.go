@@ -5,7 +5,9 @@ import (
 	"sync"
 
 	"github.com/livekit/livekit-server/pkg/sfu"
+	"github.com/livekit/livekit-server/pkg/telemetry/prometheus"
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
 )
 
 // RelayManager owns the relay sender for each track and destination peer.
@@ -56,7 +58,10 @@ func (rm *RelayManager) RelayTrack(trackID livekit.TrackID, dstPeerID string, lo
 	rm.mu.Unlock()
 	if previous != nil {
 		previous.Close()
+	} else {
+		prometheus.CascadeRelayTracksActive.WithLabelValues(rm.selfID, dstPeerID).Inc()
 	}
+	logger.Infow("cascade relay started", "trackID", trackID, "fromSFU", rm.selfID, "toSFU", dstPeerID)
 	return nil
 }
 
@@ -71,6 +76,7 @@ func (rm *RelayManager) StopRelay(trackID livekit.TrackID, dstPeerID string) {
 	rm.mu.Unlock()
 	if sender != nil {
 		sender.Close()
+		prometheus.CascadeRelayTracksActive.WithLabelValues(rm.selfID, dstPeerID).Dec()
 	}
 }
 

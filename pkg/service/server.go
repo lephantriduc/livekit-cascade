@@ -59,6 +59,7 @@ type LivekitServer struct {
 	signalServer *SignalServer
 	turnServer   *turn.Server
 	currentNode  routing.LocalNode
+	cascade      *cascadeRuntime
 	running      atomic.Bool
 	doneChan     chan struct{}
 	closedChan   chan struct{}
@@ -94,6 +95,12 @@ func NewLivekitServer(conf *config.Config,
 		turnServer:  turnServer,
 		currentNode: currentNode,
 		closedChan:  make(chan struct{}),
+	}
+	if s.cascade, err = newCascadeRuntime(conf); err != nil {
+		return nil, err
+	}
+	if s.cascade != nil {
+		roomManager.SetCascadeManager(s.cascade.manager)
 	}
 
 	middlewares := []negroni.Handler{
@@ -141,6 +148,12 @@ func NewLivekitServer(conf *config.Config,
 		mux.HandleFunc("/debug/goroutine", s.debugGoroutines)
 		mux.HandleFunc("/debug/rooms", s.debugInfo)
 	}
+	if s.cascade != nil {
+		s.cascade.registerHTTPHandlers(mux)
+		if conf.Development {
+			s.cascade.linkManager.RegisterDebugHandler(mux, s.cascade.relayManager, nil)
+		}
+	}
 
 	xtwirp.RegisterServer(mux, roomServer)
 	xtwirp.RegisterServer(mux, agentDispatchServer)
@@ -187,6 +200,9 @@ func NewLivekitServer(conf *config.Config,
 		debugMux.HandleFunc("/debug/pprof/trace", httppprof.Trace)
 		debugMux.HandleFunc("/debug/goroutine", s.debugGoroutines)
 		debugMux.HandleFunc("/debug/rooms", s.debugInfo)
+		if s.cascade != nil {
+			s.cascade.linkManager.RegisterDebugHandler(debugMux, s.cascade.relayManager, nil)
+		}
 		s.debugServer = &http.Server{
 			Handler: http.Handler(debugMux),
 		}
@@ -327,6 +343,9 @@ func (s *LivekitServer) Start() error {
 	}()
 
 	go s.backgroundWorker()
+	if s.cascade != nil {
+		go s.cascade.start()
+	}
 
 	// give time for Serve goroutine to start
 	time.Sleep(100 * time.Millisecond)
@@ -341,6 +360,9 @@ func (s *LivekitServer) Start() error {
 	_ = s.httpServer.Shutdown(ctx)
 	if s.debugServer != nil {
 		_ = s.debugServer.Shutdown(ctx)
+	}
+	if s.cascade != nil {
+		s.cascade.close()
 	}
 
 	if s.turnServer != nil {

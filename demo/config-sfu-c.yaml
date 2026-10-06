@@ -1,0 +1,29 @@
+port: 7880
+development: true
+log_level: info
+
+keys:
+  devkey: secret
+
+redis:
+  address: redis:6379
+
+prometheus:
+  port: 6789
+
+debug_handler:
+  port: 7070
+
+cascade:
+  enabled: true
+  self_id: sfu-c
+  self_addr: sfu-c:7880
+  topology: mesh
+  listen_port: 7880
+  peers:
+    - id: sfu-a
+      addr: sfu-a:7880
+    - id: sfu-b
+      addr: sfu-b:7880
+    - id: sfu-c
+      addr: sfu-c:7880

@@ -2,12 +2,16 @@ package cascading
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"sync"
+	"time"
 
+	"github.com/livekit/livekit-server/pkg/telemetry/prometheus"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -30,6 +34,10 @@ func NewLinkManager(selfID string, signaling SignalingTransport) *LinkManager {
 	}
 }
 
+func (lm *LinkManager) SelfID() string {
+	return lm.selfID
+}
+
 // GetLink safely returns an existing SFULink by remote node ID.
 func (lm *LinkManager) GetLink(nodeID string) *SFULink {
 	lm.mu.RLock()
@@ -45,6 +53,17 @@ func (lm *LinkManager) All() []*SFULink {
 		links = append(links, link)
 	}
 	return links
+}
+
+func (lm *LinkManager) AllIDs() []string {
+	lm.mu.RLock()
+	defer lm.mu.RUnlock()
+	ids := make([]string, 0, len(lm.links))
+	for id := range lm.links {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func (lm *LinkManager) OnLink(fn func(*SFULink)) {
@@ -95,6 +114,7 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 	lm.notifyLink(link)
 
 	if lm.selfID < peer.NodeID {
+		startedAt := time.Now()
 		err := lm.setUpAsOfferer(ctx, link, peer)
 		if err != nil {
 			lm.mu.Lock()
@@ -103,9 +123,29 @@ func (lm *LinkManager) EnsureLink(ctx context.Context, peer *SFUPeerInfo) (*SFUL
 			pc.Close()
 			return nil, err
 		}
+		prometheus.CascadeLinkRTT.WithLabelValues(peer.NodeID).Observe(float64(time.Since(startedAt).Milliseconds()))
 	}
 
 	return link, nil
+}
+
+func (lm *LinkManager) RegisterDebugHandler(mux *http.ServeMux, relay *RelayManager, election *BullyElection) {
+	mux.HandleFunc("/debug/cascade", func(w http.ResponseWriter, _ *http.Request) {
+		state := map[string]interface{}{
+			"self_id":      lm.selfID,
+			"active_links": lm.AllIDs(),
+			"relay_tracks": 0,
+			"current_hub":  "",
+		}
+		if relay != nil {
+			state["relay_tracks"] = relay.ActiveCount()
+		}
+		if election != nil {
+			state["current_hub"] = election.CurrentHub()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(state)
+	})
 }
 
 func (lm *LinkManager) setUpAsOfferer(ctx context.Context, link *SFULink, peer *SFUPeerInfo) error {

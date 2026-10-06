@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/livekit/livekit-server/pkg/telemetry/prometheus"
 )
 
 type GossipEngine interface {
@@ -75,6 +76,8 @@ func (m *MeshGossipEngine) Broadcast(payload []byte) error {
 	for _, link := range m.links.All() {
 		if err := link.SendGossip(msg); err != nil && firstErr == nil {
 			firstErr = err
+		} else if err == nil {
+			prometheus.CascadeGossipSentTotal.WithLabelValues(link.RemoteID).Inc()
 		}
 	}
 	return firstErr
@@ -94,7 +97,9 @@ func (m *MeshGossipEngine) HandleIncoming(senderID string, msg GossipMsg) {
 	}
 	for _, link := range m.links.All() {
 		if link.RemoteID != senderID {
-			_ = link.SendGossip(msg)
+			if err := link.SendGossip(msg); err == nil {
+				prometheus.CascadeGossipSentTotal.WithLabelValues(link.RemoteID).Inc()
+			}
 		}
 	}
 }

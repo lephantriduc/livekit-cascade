@@ -1,0 +1,68 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cascade-redis
+    networks: [sfunet]
+
+  sfu-a:
+    build: .
+    container_name: sfu-a
+    command: ["--config", "/etc/livekit/config.yaml"]
+    volumes:
+      - ./demo/config-sfu-a.yaml:/etc/livekit/config.yaml:ro
+    ports:
+      - "7880:7880"
+      - "6789:6789"
+      - "7070:7070"
+    depends_on: [redis]
+    networks: [sfunet]
+
+  sfu-b:
+    build: .
+    container_name: sfu-b
+    command: ["--config", "/etc/livekit/config.yaml"]
+    volumes:
+      - ./demo/config-sfu-b.yaml:/etc/livekit/config.yaml:ro
+    ports:
+      - "7881:7880"
+      - "6790:6789"
+      - "7071:7070"
+    depends_on: [redis]
+    networks: [sfunet]
+
+  sfu-c:
+    build: .
+    container_name: sfu-c
+    command: ["--config", "/etc/livekit/config.yaml"]
+    volumes:
+      - ./demo/config-sfu-c.yaml:/etc/livekit/config.yaml:ro
+    ports:
+      - "7882:7880"
+      - "6791:6789"
+      - "7072:7070"
+    depends_on: [redis]
+    networks: [sfunet]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: cascade-prometheus
+    volumes:
+      - ./demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on: [sfu-a, sfu-b, sfu-c]
+    networks: [sfunet]
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    container_name: cascade-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus]
+    networks: [sfunet]
+
+networks:
+  sfunet:
+    driver: bridge
